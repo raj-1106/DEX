@@ -103,3 +103,9 @@ Emits a TestResult event with the outcome.
 A convenience function that executes all the test functions in sequence.
 
 # TestCases example:
+
+<br>
+    <p align="center">
+      <img src="TestCase.png" height=50% width=50%>
+    </p>
+  <br>
