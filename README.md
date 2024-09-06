@@ -1,5 +1,11 @@
 # Solidity Assignment DEX
 
+## Deployment
+- Network Name: Polygon Amoy Testnet
+- Amoy testnet for Polygon PoS is being launched, a second testnet that provides a low-stakes environment to build, test, and break things. 
+- Amoy will use Ethereum’s Sepolia testnet as the root (L1) chain.
+
+  
 # Information about Contract
 
 # DEX.sol
