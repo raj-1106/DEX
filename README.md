@@ -115,3 +115,8 @@ A convenience function that executes all the test functions in sequence.
       <img src="TestCase.png" height=50% width=50%>
     </p>
   <br>
+
+## Contract Addresses:
+
+- Dex.sol: 0xA1755560e8CAec3d69446F57B6D97B5aF6f2BD63
+- Dex TestCase.sol: 0x300ab191e4f102ce27D6EE2a6dd9AF03B474F85b
