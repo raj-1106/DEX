@@ -1,4 +1,4 @@
-# Solidity Assignment DEX
+# DEX
 
 ## Deployment
 - Network Name: Polygon Amoy Testnet
