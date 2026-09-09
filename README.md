@@ -1,22 +1,51 @@
-# DEX
+# DEX (hardened rewrite)
 
-A constant-product AMM (x*y=k) deployed on Polygon Amoy testnet, with a 0.3% swap fee.
+## Setup
+```
+forge install foundry-rs/forge-std --no-git
+forge install OpenZeppelin/openzeppelin-contracts --no-git
+forge test -vv
+```
 
-## Deployment
+Requires solc 0.8.24 and `via_ir = true` (already set in foundry.toml) because
+the functions have enough local variables to hit "stack too deep" without it.
 
-- **Network:** Polygon Amoy Testnet (Polygon PoS testnet, Sepolia as L1 root)
-- **DEX.sol:** `0xA1755560e8CAec3d69446F57B6D97B5aF6f2BD63`
+## What changed from the original and why
+See DEX.sol comments and the accompanying review for the full rationale:
+reentrancy guard, canonical (sorted) pool keys, MINIMUM_LIQUIDITY lock,
+slippage + deadline params on every state-changing function, SafeERC20,
+and fee-on-transfer-safe accounting via measured balance deltas.
 
-## How it works
+## Known limitations (not bugs, scope decisions)
+- LP positions are an internal mapping, not a transferable ERC20. A real
+  Uniswap V2-style deployment would give each pool its own LP token via a
+  factory + clone pattern.
+- Only two-token constant-product pools; no multi-hop routing.
 
-- `addLiquidity(token0, token1, amount0, amount1)` — deposits both tokens, mints LP shares (geometric mean `sqrt(amount0 * amount1)` on first deposit, ratio-matched afterward)
-- `removeLiquidity(token0, token1, liquidityBurned)` — burns LP shares, returns proportional share of both reserves
-- `swap(tokenIn, tokenOut, amountIn)` — constant-product swap with a 0.3% fee (997/1000)
-- `getReserves(token0, token1)` — returns current reserves for a pair
+## Uniswap V4 hook (CounterHook)
 
-## Known limitations (testnet-stage)
+`src/hooks/CounterHook.sol` registers a real pool on the actual V4
+`PoolManager` (same contract as testnet/mainnet, imported from
+`Uniswap/v4-core`). It's deliberately low-privilege: it requests no
+return-delta permissions, so it can count `beforeAddLiquidity`/`beforeSwap`/
+`afterSwap` events but cannot move value in or out of a pool even if it has
+a bug. Verified against v4-core's own `Deployers`/`PoolSwapTest`/`HookMiner`
+test harness (5 tests, `test/V4Hook.t.sol`), not a mock of V4 behavior.
 
-- Pools are keyed by `(token0, token1)` in argument order, calling with the pair reversed addresses a *different* pool, not the same one. Don't assume `swap(A, B)` and `swap(B, A)` share liquidity.
-- No slippage protection (`minAmountOut`) or deadline on swaps
-- Uses raw `IERC20` transfer calls, not `SafeERC20`
-- `addLiquidity` calls external `transferFrom` before updating pool state
+```
+forge install Uniswap/v4-core --no-git
+forge install Uniswap/v4-periphery --no-git
+forge test --match-path test/V4Hook.t.sol -vv
+```
+
+Requires solc 0.8.26 exactly (PoolManager.sol pins it with a non-caret
+pragma) plus `via_ir = true`; both are already set in foundry.toml.
+
+To actually deploy to a testnet: `script/DeployV4Hook.s.sol`, set
+`POOL_MANAGER`/`TOKEN0`/`TOKEN1` env vars and run with
+`forge script script/DeployV4Hook.s.sol --rpc-url <testnet> --broadcast`.
+Read the comment in that file about CREATE2_DEPLOYER before running it —
+mining the hook address against the wrong deployer address is a real, easy
+mistake that only shows up as a revert at broadcast time, not at compile time.
+This script has NOT been run against a live chain in this environment
+(no RPC egress available here) — only compiled.
