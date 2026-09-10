@@ -12,8 +12,10 @@ import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {HookMiner} from "@uniswap/v4-periphery/test/shared/HookMiner.sol";
+import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
 import {CounterHook} from "../src/hooks/CounterHook.sol";
+import {SimpleV4Router} from "../src/hooks/SimpleV4Router.sol";
 
 /// @notice Registers CounterHook on a real V4 PoolManager (the same contract
 /// deployed on testnets/mainnet), initializes a pool, adds liquidity, and
@@ -41,6 +43,85 @@ contract V4HookTest is Test, Deployers {
         assertEq(address(hook), predictedAddress, "hook did not deploy to the mined address");
 
         (poolKey, poolId) = initPoolAndAddLiquidity(currency0, currency1, IHooks(address(hook)), 3000, SQRT_PRICE_1_1);
+    }
+
+    // ---------------------------------------------------------------
+    // SimpleV4Router: main case
+    // ---------------------------------------------------------------
+    function test_SimpleV4Router_SwapExactInputSingle_MainCase() public {
+        SimpleV4Router router = new SimpleV4Router(manager);
+        address tokenIn = Currency.unwrap(currency0);
+        address tokenOut = Currency.unwrap(currency1);
+
+        MockERC20(tokenIn).approve(address(router), type(uint256).max);
+        uint256 balOutBefore = MockERC20(tokenOut).balanceOf(address(this));
+        uint256 balInBefore = MockERC20(tokenIn).balanceOf(address(this));
+
+        uint256 amountOut = router.swapExactInputSingle(
+            tokenIn, tokenOut, poolKey.fee, poolKey.tickSpacing, address(hook), 1000, 0, ZERO_BYTES, block.timestamp + 1
+        );
+
+        assertGt(amountOut, 0);
+        assertEq(MockERC20(tokenOut).balanceOf(address(this)), balOutBefore + amountOut);
+        assertEq(MockERC20(tokenIn).balanceOf(address(this)), balInBefore - 1000);
+        // hook fired for this swap too, proving the router goes through the real pool/hook, not around it
+        assertEq(hook.beforeSwapCount(poolId), 1);
+    }
+
+    // ---------------------------------------------------------------
+    // SimpleV4Router: failure case, slippage
+    // ---------------------------------------------------------------
+    function test_SimpleV4Router_RevertsOnSlippage() public {
+        SimpleV4Router router = new SimpleV4Router(manager);
+        address tokenIn = Currency.unwrap(currency0);
+        address tokenOut = Currency.unwrap(currency1);
+        MockERC20(tokenIn).approve(address(router), type(uint256).max);
+
+        vm.expectRevert(); // TooLittleReceived
+        router.swapExactInputSingle(
+            tokenIn,
+            tokenOut,
+            poolKey.fee,
+            poolKey.tickSpacing,
+            address(hook),
+            1000,
+            1000, // demanding 1:1 output, impossible with the 0.30% fee
+            ZERO_BYTES,
+            block.timestamp + 1
+        );
+    }
+
+    // ---------------------------------------------------------------
+    // SimpleV4Router: failure case, expired deadline
+    // ---------------------------------------------------------------
+    function test_SimpleV4Router_RevertsOnExpiredDeadline() public {
+        SimpleV4Router router = new SimpleV4Router(manager);
+        address tokenIn = Currency.unwrap(currency0);
+        address tokenOut = Currency.unwrap(currency1);
+        MockERC20(tokenIn).approve(address(router), type(uint256).max);
+
+        vm.warp(block.timestamp + 1 hours);
+        vm.expectRevert(SimpleV4Router.Expired.selector);
+        router.swapExactInputSingle(
+            tokenIn,
+            tokenOut,
+            poolKey.fee,
+            poolKey.tickSpacing,
+            address(hook),
+            1000,
+            0,
+            ZERO_BYTES,
+            block.timestamp - 1 hours
+        );
+    }
+
+    // ---------------------------------------------------------------
+    // SimpleV4Router: failure case, direct unlockCallback call blocked
+    // ---------------------------------------------------------------
+    function test_SimpleV4Router_RevertsOnDirectCallbackCall() public {
+        SimpleV4Router router = new SimpleV4Router(manager);
+        vm.expectRevert(SimpleV4Router.NotPoolManager.selector);
+        router.unlockCallback("");
     }
 
     // ---------------------------------------------------------------

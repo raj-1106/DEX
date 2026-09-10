@@ -30,12 +30,24 @@ contract DEX is ReentrancyGuard {
     mapping(address user => mapping(address token0 => mapping(address token1 => uint256))) public liquidity;
 
     event LiquidityAdded(
-        address indexed user, address indexed token0, address indexed token1, uint256 amount0, uint256 amount1, uint256 liquidityMinted
+        address indexed user,
+        address indexed token0,
+        address indexed token1,
+        uint256 amount0,
+        uint256 amount1,
+        uint256 liquidityMinted
     );
     event LiquidityRemoved(
-        address indexed user, address indexed token0, address indexed token1, uint256 amount0, uint256 amount1, uint256 liquidityBurned
+        address indexed user,
+        address indexed token0,
+        address indexed token1,
+        uint256 amount0,
+        uint256 amount1,
+        uint256 liquidityBurned
     );
-    event Swap(address indexed user, address indexed tokenIn, address indexed tokenOut, uint256 amountIn, uint256 amountOut);
+    event Swap(
+        address indexed user, address indexed tokenIn, address indexed tokenOut, uint256 amountIn, uint256 amountOut
+    );
 
     modifier ensure(uint256 deadline) {
         require(block.timestamp <= deadline, "DEX: EXPIRED");
@@ -187,7 +199,8 @@ contract DEX is ReentrancyGuard {
         uint256 actualAmountIn = tIn.balanceOf(address(this)) - balInBefore;
         require(actualAmountIn > 0, "DEX: NO_TOKENS_RECEIVED");
 
-        (uint256 reserveIn, uint256 reserveOut) = inIsToken0 ? (pool.reserve0, pool.reserve1) : (pool.reserve1, pool.reserve0);
+        (uint256 reserveIn, uint256 reserveOut) =
+            inIsToken0 ? (pool.reserve0, pool.reserve1) : (pool.reserve1, pool.reserve0);
 
         uint256 amountInWithFee = actualAmountIn * FEE_NUMERATOR;
         uint256 numerator = amountInWithFee * reserveOut;
